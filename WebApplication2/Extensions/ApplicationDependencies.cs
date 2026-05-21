@@ -1,4 +1,5 @@
-﻿using FoodPlan.Core.Services.Implementations;
+using FoodPlan.Core.Services.Implementations;
+using FoodPlan.Core.Services.Interfaces;
 using FoodPlan.COre.Application.Interfaces;
 using FoodPlan.DataAccess.Application.Interfaces;
 using FoodPlan.DataAccess.Data;
@@ -8,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
 using System.Text;
+using WebApplication2.Http;
 using WebApplication2.Mappings;
 using WebApplication2.Services.Implementations;
 
@@ -17,19 +19,31 @@ namespace WebApplication2.Extensions
     {
         public static void AddServices(this WebApplicationBuilder builder)
         {
-            builder.Services.AddScoped<IPlanGeneratorService, PlanGeneratorService>();
-            builder.Services.AddScoped<IMealPlanRepository, MealPlanRepository>();
-            builder.Services.AddScoped<IFoodCatalogClient, FoodCatalogClient>();
-            builder.Services.AddScoped<IProfileClient, ProfileClient>();
-
-            builder.Services.AddDbContext<PlanDbContext>(options =>
-                options.UseSqlServer(builder.Configuration.GetConnectionString("PlanDb")));
-            builder.Services.AddAutoMapper(typeof(MappingProfile));
+            builder.AddPersistence();
+            builder.AddInfrastructure();
+            builder.AddDomainServices();
             builder.AddHttpClientWithPollyResilience();
-
-            // Register authentication & authorization once (safe if called multiple times)
             builder.ConfigureAuthentication();
             builder.ConfigureAuthorizationPolicy();
+        }
+
+        private static void AddPersistence(this WebApplicationBuilder builder)
+        {
+            builder.Services.AddDbContext<PlanDbContext>(options =>
+                options.UseSqlServer(builder.Configuration.GetConnectionString("PlanDb")));
+        }
+
+        private static void AddInfrastructure(this WebApplicationBuilder builder)
+        {
+            builder.Services.AddHttpContextAccessor();
+            builder.Services.AddTransient<ForwardAuthHandler>();
+            builder.Services.AddAutoMapper(typeof(MappingProfile));
+        }
+
+        private static void AddDomainServices(this WebApplicationBuilder builder)
+        {
+            builder.Services.AddScoped<IPlanGeneratorService, PlanGeneratorService>();
+            builder.Services.AddScoped<IMealPlanRepository, MealPlanRepository>();
         }
 
 
@@ -105,10 +119,12 @@ namespace WebApplication2.Extensions
         public static void AddHttpClientWithPollyResilience(this WebApplicationBuilder builder)
         {
             builder.Services.AddHttpClient<IFoodCatalogClient, FoodCatalogClient>()
+                .AddHttpMessageHandler<ForwardAuthHandler>()
                 .AddStandardResilienceHandler();
 
             builder.Services.AddHttpClient<IProfileClient, ProfileClient>()
-              .AddStandardResilienceHandler();
+                .AddHttpMessageHandler<ForwardAuthHandler>()
+                .AddStandardResilienceHandler();
         }
     }
 }

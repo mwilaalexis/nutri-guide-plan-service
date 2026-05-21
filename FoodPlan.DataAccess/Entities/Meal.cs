@@ -8,6 +8,8 @@
         public string imagePath { get; set; } = string.Empty;
         public double Calories { get; set; }
         public Guid FoodId { get; set; } = Guid.NewGuid();
+        public List<MealIngredient> Ingredients { get; set; } = new();
     }
+
 
 }

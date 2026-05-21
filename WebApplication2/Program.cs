@@ -1,4 +1,9 @@
-﻿using WebApplication2.Extensions;
+using FoodPlan.DataAccess.Data;
+using Microsoft.EntityFrameworkCore;
+using QuestPDF.Infrastructure;
+using WebApplication2.Extensions;
+
+QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +28,8 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -33,11 +40,11 @@ app.UseCors("AllowAll");
 
 app.UseHttpsRedirection();
 
-// IMPORTANT: authentication before authorization and before controllers
+
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Diagnostic middleware placed AFTER authentication so it shows the authenticated principal
+
 app.Use(async (context, next) =>
 {
     var logger = context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("RequestAuth");

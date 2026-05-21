@@ -1,0 +1,10 @@
+﻿namespace FoodPlan.Core.Dto
+{
+    public class MealIngredientDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public decimal Quantity { get; set; }
+        public string Unit { get; set; } = string.Empty;
+    }
+
+}

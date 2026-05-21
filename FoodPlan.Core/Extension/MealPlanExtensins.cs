@@ -48,7 +48,9 @@ namespace FoodPlan.Core.Extensions
                         Id = Guid.NewGuid(),
                         Type = meal.Type,
                         Name = meal.Name,
-                        Calories = meal.Calories
+                        Calories = meal.Calories,
+                        imagePath = meal.imagePath,
+                        FoodId = meal.FoodId
                     });
                 }
 
@@ -60,7 +62,9 @@ namespace FoodPlan.Core.Extensions
                         Id = Guid.NewGuid(),
                         Type = meal.Type,
                         Name = meal.Name,
-                        Calories = meal.Calories
+                        Calories = meal.Calories,
+                        imagePath = meal.imagePath,
+                        FoodId = meal.FoodId
                     });
                 }
 
@@ -72,7 +76,9 @@ namespace FoodPlan.Core.Extensions
                         Id = Guid.NewGuid(),
                         Type = meal.Type,
                         Name = meal.Name,
-                        Calories = meal.Calories
+                        Calories = meal.Calories,
+                        imagePath = meal.imagePath,
+                        FoodId = meal.FoodId
                     });
                 }
 
@@ -84,7 +90,9 @@ namespace FoodPlan.Core.Extensions
                         Id = Guid.NewGuid(),
                         Type = meal.Type,
                         Name = meal.Name,
-                        Calories = meal.Calories
+                        Calories = meal.Calories,
+                        imagePath = meal.imagePath,
+                        FoodId = meal.FoodId
                     });
                 }
 

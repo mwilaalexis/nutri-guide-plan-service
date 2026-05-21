@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace FoodPlan.Core.Services.Implementations;
 
-public class PlanGeneratorService : IPlanGeneratorService
+public partial class PlanGeneratorService : IPlanGeneratorService
 {
     private readonly IMealPlanRepository _repository;
     private readonly IFoodCatalogClient _foodClient;
@@ -62,10 +62,10 @@ public class PlanGeneratorService : IPlanGeneratorService
                 TotalCalories = targetCalories
             };
 
-            daily.Breakfast.Add(GetRandomMealWithDiversity(foods, "breakfast", plan));
-            daily.Lunch.Add(GetRandomMealWithDiversity(foods, "lunch", plan));
-            daily.Dinner.Add(GetRandomMealWithDiversity(foods, "dinner", plan));
-            daily.Snacks.Add(GetRandomMealWithDiversity(foods, "snack", plan));
+            daily.Breakfast.Add(SelectMealUsingNutritionGuide(foods, "breakfast", plan, targetCalories, profile.Goal));
+            daily.Lunch.Add(SelectMealUsingNutritionGuide(foods, "lunch", plan, targetCalories, profile.Goal));
+            daily.Dinner.Add(SelectMealUsingNutritionGuide(foods, "dinner", plan, targetCalories, profile.Goal));
+            daily.Snacks.Add(SelectMealUsingNutritionGuide(foods, "snack", plan, targetCalories, profile.Goal));
 
             plan.Days.Add(daily);
         }
@@ -94,10 +94,12 @@ public class PlanGeneratorService : IPlanGeneratorService
         if (meal == null) return null;
 
         var compatibleFoods = await _foodClient.GetCompatibleFoodsAsync(plan.DietStyle, plan.AvoidTags, ct);
+        if (compatibleFoods.Count == 0)
+            throw new InvalidOperationException("No compatible foods found for this plan's diet and restrictions.");
 
         var newMeal = preferredFoodId.HasValue
             ? GetSpecificMeal(compatibleFoods, preferredFoodId.Value, meal.Type)
-            : GetRandomMealWithDiversity(compatibleFoods, meal.Type, plan);
+            : SelectMealUsingNutritionGuide(compatibleFoods, meal.Type, plan, plan.TargetDailyCalories, plan.Goal);
 
 
         meal.Name = newMeal.Name;
@@ -117,18 +119,20 @@ public class PlanGeneratorService : IPlanGeneratorService
             return null;
 
         var foods = await _foodClient.GetCompatibleFoodsAsync(plan.DietStyle, plan.AvoidTags, ct);
+        if (foods.Count == 0)
+            throw new InvalidOperationException("No compatible foods found for this plan's diet and restrictions.");
+
         var day = plan.Days[dayIndex];
-        var currentDate = day.Date;
 
         day.Breakfast.Clear();
         day.Lunch.Clear();
         day.Dinner.Clear();
         day.Snacks.Clear();
 
-        day.Breakfast.Add(GetRandomMealWithDiversity(foods, "breakfast", plan));
-        day.Lunch.Add(GetRandomMealWithDiversity(foods, "lunch", plan));
-        day.Dinner.Add(GetRandomMealWithDiversity(foods, "dinner", plan));
-        day.Snacks.Add(GetRandomMealWithDiversity(foods, "snack", plan));
+        day.Breakfast.Add(SelectMealUsingNutritionGuide(foods, "breakfast", plan, plan.TargetDailyCalories, plan.Goal));
+        day.Lunch.Add(SelectMealUsingNutritionGuide(foods, "lunch", plan, plan.TargetDailyCalories, plan.Goal));
+        day.Dinner.Add(SelectMealUsingNutritionGuide(foods, "dinner", plan, plan.TargetDailyCalories, plan.Goal));
+        day.Snacks.Add(SelectMealUsingNutritionGuide(foods, "snack", plan, plan.TargetDailyCalories, plan.Goal));
 
         await _repository.UpdateAsync(plan, ct);
 
@@ -144,8 +148,10 @@ public class PlanGeneratorService : IPlanGeneratorService
         if (meal == null) return null;
 
         var foods = await _foodClient.GetCompatibleFoodsAsync(plan.DietStyle, plan.AvoidTags, ct);
+        if (foods.Count == 0)
+            throw new InvalidOperationException("No compatible foods found for this plan's diet and restrictions.");
 
-        var newMeal = GetRandomMealWithDiversity(foods, meal.Type, plan);
+        var newMeal = SelectMealUsingNutritionGuide(foods, meal.Type, plan, plan.TargetDailyCalories, plan.Goal);
 
         meal.Name = newMeal.Name;
         meal.Calories = newMeal.Calories;
@@ -157,11 +163,17 @@ public class PlanGeneratorService : IPlanGeneratorService
         return _mapper.Map<PlanSummaryDto>(plan);
     }
 
-    public async Task<PlanSummaryDto> GetPlanSummaryAsync(Guid planId, CancellationToken ct = default)
+    public async Task<PlanSummaryDto?> GetPlanSummaryAsync(Guid planId, CancellationToken ct = default)
     {
         var plan = await _repository.GetByIdAsync(planId, ct);
-        if(DateTime.Now.Subtract(plan.GeneratedAt).Days < plan.NumberOfDays) { plan.Status = "Completed"; }
-        return plan == null ? new PlanSummaryDto() : _mapper.Map<PlanSummaryDto>(plan);
+        if (plan == null)
+            return null;
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var lastPlanDate = plan.StartDate.AddDays(Math.Max(0, plan.NumberOfDays - 1));
+        plan.Status = today > lastPlanDate ? "Completed" : "Active";
+
+        return _mapper.Map<PlanSummaryDto>(plan);
     }
 
     public async Task<PlanSummaryDto?> DuplicatePlanAsync(Guid planId, CancellationToken ct = default)
@@ -175,65 +187,6 @@ public class PlanGeneratorService : IPlanGeneratorService
         await _repository.AddAsync(clone, ct);
 
         return _mapper.Map<PlanSummaryDto>(clone);
-    }
-
-
-
-    private Meal GetRandomMealWithDiversity(List<FoodItemSummary> foods, string mealType, MealPlan plan)
-    {
-        if (foods.Count == 0)
-            throw new InvalidOperationException("No foods available");
-
-
-        var candidates = foods
-            .Where(f => f.Tags.Any(t =>
-                t.Equals(mealType, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
-
-        if (!candidates.Any())
-            candidates = foods;
-
-        var usedFoodIds = plan.Days
-            .SelectMany(d => d.GetAllMeals())
-            .Select(m => m.FoodId)
-            .ToHashSet();
-
-        var scored = candidates.Select(food =>
-        {
-            int penalty = usedFoodIds.Contains(food.Id) ? 80 : 0;
-            int score = _random.Next(100) - penalty;
-            return new { Food = food, Score = score };
-        })
-        .OrderByDescending(x => x.Score)
-        .ToList();
-
-        var selectedFood = scored.First().Food;
-
-        return new Meal
-        {
-            Id = Guid.NewGuid(),
-            Type = mealType.ToLowerInvariant(),
-            Name = selectedFood.Name,
-            Calories = selectedFood.Calories,
-            imagePath = selectedFood.ImagePath,
-            FoodId = selectedFood.Id
-        };
-    }
-
-    private Meal GetSpecificMeal(List<FoodItemSummary> foods, Guid foodId, string originalMealType)
-    {
-        var selected = foods.FirstOrDefault(f => f.Id == foodId)
-            ?? throw new InvalidOperationException("Selected food is not compatible with this plan.");
-
-        return new Meal
-        {
-            Id = Guid.NewGuid(),
-            Type = originalMealType.ToLowerInvariant(),
-            Name = selected.Name,
-            Calories = selected.Calories,
-            imagePath = selected.ImagePath,
-            FoodId = selected.Id
-        };
     }
 
     private decimal CalculateDailyCalories(UserProfileSummary profile)

@@ -1,8 +1,10 @@
-﻿using FoodPlan.Core.Dto;
+using FoodPlan.Core.Dto;
+using WebApplication2.Services;
 using FoodPlan.COre.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using FoodPlan.Core.Services.Interfaces;
 
 namespace WebApplication2.Controllers
 {
@@ -12,10 +14,12 @@ namespace WebApplication2.Controllers
     public class PlansController : ControllerBase
     {
         private readonly IPlanGeneratorService _service;
+        private readonly IPlanExportBuilder PlanExportBuilder;
 
-        public PlansController(IPlanGeneratorService service)
+        public PlansController(IPlanGeneratorService service, IPlanExportBuilder planExportBuilder)
         {
             _service = service;
+            PlanExportBuilder = planExportBuilder;
         }
 
         private string? GetUserId()
@@ -119,5 +123,6 @@ namespace WebApplication2.Controllers
 
             return Ok(duplicated);
         }
+
     }
 }
